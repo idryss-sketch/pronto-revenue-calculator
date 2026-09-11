@@ -1,0 +1,58 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  background-color: #ffffff;
+  color: #000000;
+}
+
+/* Underline input style */
+input[type='number'],
+input[type='text'] {
+  border: none;
+  border-bottom: 2px solid #000000;
+  background: transparent;
+  outline: none;
+  font-size: 1rem;
+  padding: 0.5rem 0;
+  transition: border-color 0.2s ease;
+}
+
+input[type='number']:focus,
+input[type='text']:focus {
+  border-bottom-color: #333333;
+}
+
+input[type='number']::placeholder,
+input[type='text']::placeholder {
+  color: #999999;
+}
+
+/* Remove number input spinner */
+input[type='number']::-webkit-outer-spin-button,
+input[type='number']::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type='number'] {
+  -moz-appearance: textfield;
+}

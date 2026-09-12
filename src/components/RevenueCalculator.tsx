@@ -1,39 +1,51 @@
 import React, { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Zap, ArrowRight } from 'lucide-react'
+import { Zap, ArrowRight, ChevronUp, ChevronDown } from 'lucide-react'
 
 interface CalculatorValues {
   monthlyLeads: number
   responseTime: number
+  timeUnit: 'minutes' | 'hours' | 'days'
   closeRate: number
   jobValue: number
 }
 
 interface Results {
   lostLeads: number
+  lostLeadsPercentage: number
   lostMonthlyRevenue: number
   lostAnnualRevenue: number
   currentCloseRate: number
   idealCloseRate: number
-  currentMonthlyRevenue: number
-  idealMonthlyRevenue: number
-  currentClosedJobs: number
-  idealClosedJobs: number
 }
 
 const RevenueCalculator: React.FC = () => {
   const [values, setValues] = useState<CalculatorValues>({
-    monthlyLeads: 0,
-    responseTime: 0,
-    closeRate: 0,
-    jobValue: 0,
+    monthlyLeads: 120,
+    responseTime: 5,
+    timeUnit: 'hours',
+    closeRate: 20,
+    jobValue: 500,
   })
+
+  // Convert time to hours for calculation
+  const getResponseTimeInHours = (): number => {
+    switch (values.timeUnit) {
+      case 'minutes':
+        return values.responseTime / 60
+      case 'hours':
+        return values.responseTime
+      case 'days':
+        return values.responseTime * 24
+      default:
+        return values.responseTime
+    }
+  }
 
   // Conversion retention curve: exponential decay from 1.0 at 5 min to ~0.17 at 24 hours
   const getConversionRetention = (responseTimeHours: number): number => {
-    if (responseTimeHours <= 0) return 1.0
-    // Exponential decay model
-    const decayRate = 0.15 // Controls how fast it decays
+    if (responseTimeHours <= 0.083) return 1.0 // 5 minutes in hours
+    const decayRate = 0.15
     const retention = Math.max(1 / 6, Math.exp(-decayRate * responseTimeHours))
     return retention
   }
@@ -41,32 +53,33 @@ const RevenueCalculator: React.FC = () => {
   const results = useMemo<Results | null>(() => {
     if (
       values.monthlyLeads <= 0 ||
-      values.responseTime < 0 ||
+      values.responseTime <= 0 ||
       values.closeRate <= 0 ||
       values.jobValue <= 0
     ) {
       return null
     }
 
-    const currentRetention = getConversionRetention(values.responseTime)
-    const idealRetention = 1.0 // 5-minute response
+    const responseTimeHours = getResponseTimeInHours()
+    const currentRetention = getConversionRetention(responseTimeHours)
+    const idealRetention = 1.0
 
-    // Current close rate as decimal
     const currentCloseRateDecimal = values.closeRate / 100
-
-    // Ideal close rate: current rate divided by retention, capped at 95%
     const idealCloseRateDecimal = Math.min(
       0.95,
       currentCloseRateDecimal / currentRetention
     )
 
-    // Lost conversions
     const lostLeads = Math.round(
       values.monthlyLeads *
         (idealCloseRateDecimal - currentCloseRateDecimal)
     )
 
-    // Revenue calculations
+    const lostLeadsPercentage = Math.round(
+      ((idealCloseRateDecimal - currentCloseRateDecimal) / idealCloseRateDecimal) *
+        100
+    )
+
     const currentMonthlyRevenue = Math.round(
       values.monthlyLeads * currentCloseRateDecimal * values.jobValue
     )
@@ -76,39 +89,42 @@ const RevenueCalculator: React.FC = () => {
     const lostMonthlyRevenue = idealMonthlyRevenue - currentMonthlyRevenue
     const lostAnnualRevenue = lostMonthlyRevenue * 12
 
-    // Closed jobs
-    const currentClosedJobs = Math.round(
-      values.monthlyLeads * currentCloseRateDecimal
-    )
-    const idealClosedJobs = Math.round(
-      values.monthlyLeads * idealCloseRateDecimal
-    )
-
     return {
       lostLeads,
+      lostLeadsPercentage,
       lostMonthlyRevenue,
       lostAnnualRevenue,
       currentCloseRate: values.closeRate,
       idealCloseRate: Math.round(idealCloseRateDecimal * 100),
-      currentMonthlyRevenue,
-      idealMonthlyRevenue,
-      currentClosedJobs,
-      idealClosedJobs,
     }
   }, [values])
 
-  const isAlreadyFast = values.responseTime > 0 && values.responseTime <= 5
+  const isAlreadyFast =
+    values.responseTime > 0 &&
+    getResponseTimeInHours() <= 0.083
 
-  const handleChange = (field: keyof CalculatorValues, value: number) => {
+  const handleChange = (
+    field: keyof CalculatorValues,
+    value: string | number
+  ) => {
     setValues((prev) => ({
       ...prev,
       [field]: value,
     }))
   }
 
+  const incrementValue = (field: keyof CalculatorValues, step: number = 1) => {
+    if (field === 'timeUnit') return
+    const currentValue = values[field] as number
+    setValues((prev) => ({
+      ...prev,
+      [field]: Math.max(1, currentValue + step),
+    }))
+  }
+
   return (
     <div className="min-h-screen bg-white text-black flex items-center justify-center p-6">
-      <div className="w-full max-w-2xl">
+      <div className="w-full max-w-3xl">
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
@@ -119,16 +135,16 @@ const RevenueCalculator: React.FC = () => {
           <div className="flex items-center justify-center gap-2 mb-4">
             <Zap className="w-4 h-4" />
             <span className="text-xs font-semibold tracking-widest uppercase">
-              Pronto AI Revenue Calculator
+              Revenue Calculator
             </span>
           </div>
           <h1 className="text-4xl md:text-5xl font-bold mb-4 leading-tight">
             Let's see how much money you're losing.
           </h1>
-          <p className="text-lg text-gray-700 leading-relaxed">
-            Speed-to-lead is the biggest revenue lever for service businesses.
-            Leads contacted within 5 minutes are 21x more likely to qualify than
-            those contacted after 30+ minutes.
+          <p className="text-lg text-gray-600 leading-relaxed">
+            Speed-to-lead is the single biggest lever in service-business revenue.
+            Fill in four numbers and we'll estimate what slow responses are costing
+            you.
           </p>
         </motion.div>
 
@@ -137,87 +153,157 @@ const RevenueCalculator: React.FC = () => {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.6, delay: 0.2 }}
-          className="space-y-8 mb-12"
+          className="space-y-12 mb-12"
         >
           {/* Monthly Leads */}
           <div>
-            <label className="block text-sm text-gray-600 mb-2">
+            <label className="block text-xs text-gray-500 mb-3 uppercase tracking-wide font-semibold">
               Monthly leads
             </label>
-            <input
-              type="number"
-              placeholder="0"
-              value={values.monthlyLeads || ''}
-              onChange={(e) =>
-                handleChange('monthlyLeads', parseInt(e.target.value) || 0)
-              }
-              className="w-full text-3xl font-bold focus:outline-none"
-            />
+            <div className="flex items-center gap-4">
+              <input
+                type="number"
+                value={values.monthlyLeads}
+                onChange={(e) =>
+                  handleChange('monthlyLeads', parseInt(e.target.value) || 0)
+                }
+                className="text-4xl font-bold focus:outline-none border-b-2 border-black pb-2 flex-1"
+              />
+              <div className="flex flex-col gap-1">
+                <button
+                  onClick={() => incrementValue('monthlyLeads', 10)}
+                  className="p-1 hover:bg-gray-100 rounded"
+                >
+                  <ChevronUp className="w-5 h-5" />
+                </button>
+                <button
+                  onClick={() => incrementValue('monthlyLeads', -10)}
+                  className="p-1 hover:bg-gray-100 rounded"
+                >
+                  <ChevronDown className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
             <p className="text-xs text-gray-500 mt-2">
-              How many qualified leads do you get per month?
+              How many inbound leads do you get per month?
             </p>
           </div>
 
-          {/* Response Time */}
+          {/* Response Time with Unit Toggle */}
           <div>
-            <label className="block text-sm text-gray-600 mb-2">
-              Average response time
+            <label className="block text-xs text-gray-500 mb-3 uppercase tracking-wide font-semibold">
+              Avg. response time
             </label>
-            <div className="flex items-baseline gap-3">
-              <input
-                type="number"
-                placeholder="0"
-                value={values.responseTime || ''}
-                onChange={(e) =>
-                  handleChange('responseTime', parseInt(e.target.value) || 0)
-                }
-                className="text-3xl font-bold focus:outline-none flex-1"
-              />
-              <span className="text-3xl font-bold">hours</span>
+            <div className="flex items-center gap-4">
+              <div className="flex-1 flex items-center gap-2">
+                <input
+                  type="number"
+                  value={values.responseTime}
+                  onChange={(e) =>
+                    handleChange('responseTime', parseInt(e.target.value) || 0)
+                  }
+                  className="text-4xl font-bold focus:outline-none border-b-2 border-black pb-2 flex-1"
+                />
+                <select
+                  value={values.timeUnit}
+                  onChange={(e) =>
+                    handleChange('timeUnit', e.target.value as 'minutes' | 'hours' | 'days')
+                  }
+                  className="text-lg font-semibold focus:outline-none bg-white cursor-pointer px-2"
+                >
+                  <option value="minutes">minutes</option>
+                  <option value="hours">hours</option>
+                  <option value="days">days</option>
+                </select>
+              </div>
+              <div className="flex flex-col gap-1">
+                <button
+                  onClick={() => incrementValue('responseTime', 1)}
+                  className="p-1 hover:bg-gray-100 rounded"
+                >
+                  <ChevronUp className="w-5 h-5" />
+                </button>
+                <button
+                  onClick={() => incrementValue('responseTime', -1)}
+                  className="p-1 hover:bg-gray-100 rounded"
+                >
+                  <ChevronDown className="w-5 h-5" />
+                </button>
+              </div>
             </div>
             <p className="text-xs text-gray-500 mt-2">
-              How long does it currently take you to respond to leads?
+              How long until a lead hears back from you, on average?
             </p>
           </div>
 
           {/* Close Rate */}
           <div>
-            <label className="block text-sm text-gray-600 mb-2">
+            <label className="block text-xs text-gray-500 mb-3 uppercase tracking-wide font-semibold">
               Close rate
             </label>
-            <div className="flex items-baseline gap-3">
-              <input
-                type="number"
-                placeholder="0"
-                value={values.closeRate || ''}
-                onChange={(e) =>
-                  handleChange('closeRate', parseInt(e.target.value) || 0)
-                }
-                className="text-3xl font-bold focus:outline-none flex-1"
-              />
-              <span className="text-3xl font-bold">%</span>
+            <div className="flex items-center gap-4">
+              <div className="flex-1 flex items-center gap-2">
+                <input
+                  type="number"
+                  value={values.closeRate}
+                  onChange={(e) =>
+                    handleChange('closeRate', parseInt(e.target.value) || 0)
+                  }
+                  className="text-4xl font-bold focus:outline-none border-b-2 border-black pb-2 flex-1"
+                />
+                <span className="text-2xl font-semibold">%</span>
+              </div>
+              <div className="flex flex-col gap-1">
+                <button
+                  onClick={() => incrementValue('closeRate', 5)}
+                  className="p-1 hover:bg-gray-100 rounded"
+                >
+                  <ChevronUp className="w-5 h-5" />
+                </button>
+                <button
+                  onClick={() => incrementValue('closeRate', -5)}
+                  className="p-1 hover:bg-gray-100 rounded"
+                >
+                  <ChevronDown className="w-5 h-5" />
+                </button>
+              </div>
             </div>
             <p className="text-xs text-gray-500 mt-2">
-              What percentage of leads do you currently close?
+              What % of your leads turn into paying jobs?
             </p>
           </div>
 
           {/* Job Value */}
           <div>
-            <label className="block text-sm text-gray-600 mb-2">
+            <label className="block text-xs text-gray-500 mb-3 uppercase tracking-wide font-semibold">
               Average job value
             </label>
-            <div className="flex items-baseline gap-3">
-              <span className="text-3xl font-bold">$</span>
-              <input
-                type="number"
-                placeholder="0"
-                value={values.jobValue || ''}
-                onChange={(e) =>
-                  handleChange('jobValue', parseInt(e.target.value) || 0)
-                }
-                className="text-3xl font-bold focus:outline-none flex-1"
-              />
+            <div className="flex items-center gap-4">
+              <div className="flex-1 flex items-center gap-2">
+                <span className="text-2xl font-semibold">$</span>
+                <input
+                  type="number"
+                  value={values.jobValue}
+                  onChange={(e) =>
+                    handleChange('jobValue', parseInt(e.target.value) || 0)
+                  }
+                  className="text-4xl font-bold focus:outline-none border-b-2 border-black pb-2 flex-1"
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <button
+                  onClick={() => incrementValue('jobValue', 100)}
+                  className="p-1 hover:bg-gray-100 rounded"
+                >
+                  <ChevronUp className="w-5 h-5" />
+                </button>
+                <button
+                  onClick={() => incrementValue('jobValue', -100)}
+                  className="p-1 hover:bg-gray-100 rounded"
+                >
+                  <ChevronDown className="w-5 h-5" />
+                </button>
+              </div>
             </div>
             <p className="text-xs text-gray-500 mt-2">
               What's the average value of a closed job?
@@ -227,146 +313,98 @@ const RevenueCalculator: React.FC = () => {
 
         {/* Results */}
         <AnimatePresence mode="wait">
-          {results && (
+          {results && !isAlreadyFast && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 20 }}
               transition={{ duration: 0.5 }}
-              className="bg-black text-white p-8 md:p-10 rounded-lg space-y-8"
+              className="bg-black text-white p-10 rounded-lg space-y-6 mb-8"
             >
-              {/* Main Headline */}
-              {!isAlreadyFast ? (
-                <>
-                  <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: 0.2 }}
-                  >
-                    <h2 className="text-3xl md:text-4xl font-bold leading-tight">
-                      You're losing about{' '}
-                      <span className="underline">
-                        {results.lostLeads.toLocaleString()}
-                      </span>{' '}
-                      leads a month — roughly{' '}
-                      <span className="underline">
-                        ${results.lostMonthlyRevenue.toLocaleString()}
-                      </span>{' '}
-                      in missed revenue.
-                    </h2>
-                  </motion.div>
+              {/* Main Result */}
+              <div>
+                <p className="text-gray-400 text-sm mb-2">YOUR ESTIMATED LOSS</p>
+                <h2 className="text-5xl font-bold leading-tight mb-2">
+                  You are losing about{' '}
+                  <span className="underline">{results.lostLeadsPercentage}%</span> of
+                  your leads
+                </h2>
+                <p className="text-3xl font-bold text-gray-100">
+                  That's costing you{' '}
+                  <span className="underline">
+                    ${results.lostMonthlyRevenue.toLocaleString()}
+                  </span>{' '}
+                  a month.
+                </p>
+              </div>
 
-                  {/* Explanation */}
-                  <motion.p
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: 0.3 }}
-                    className="text-lg text-gray-300 leading-relaxed"
-                  >
-                    A 5-minute response could lift your close rate from{' '}
-                    <strong>{results.currentCloseRate}%</strong> to{' '}
-                    <strong>{results.idealCloseRate}%</strong>. That's{' '}
-                    <strong>${results.lostAnnualRevenue.toLocaleString()}</strong>{' '}
-                    per year walking out the door.
-                  </motion.p>
-
-                  {/* Comparison */}
-                  <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: 0.4 }}
-                    className="grid grid-cols-2 gap-6 pt-4 border-t border-gray-700"
-                  >
-                    <div>
-                      <p className="text-xs font-semibold text-gray-400 mb-3 uppercase tracking-wide">
-                        Now (monthly)
-                      </p>
-                      <div className="space-y-2">
-                        <div>
-                          <p className="text-sm text-gray-400">Revenue</p>
-                          <p className="text-2xl font-bold">
-                            ${results.currentMonthlyRevenue.toLocaleString()}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-gray-400">Closed jobs</p>
-                          <p className="text-2xl font-bold">
-                            {results.currentClosedJobs}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div>
-                      <p className="text-xs font-semibold text-gray-400 mb-3 uppercase tracking-wide">
-                        With 5-min response
-                      </p>
-                      <div className="space-y-2">
-                        <div>
-                          <p className="text-sm text-gray-400">Revenue</p>
-                          <p className="text-2xl font-bold">
-                            ${results.idealMonthlyRevenue.toLocaleString()}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-gray-400">Closed jobs</p>
-                          <p className="text-2xl font-bold">
-                            {results.idealClosedJobs}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </motion.div>
-
-                  {/* Citation */}
-                  <motion.p
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: 0.5 }}
-                    className="text-xs text-gray-500 pt-2"
-                  >
-                    Based on MIT and InsideSales lead-response time studies.
-                  </motion.p>
-                </>
-              ) : (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: 0.2 }}
-                  className="space-y-4"
-                >
-                  <h2 className="text-3xl md:text-4xl font-bold leading-tight">
-                    You're capturing nearly every lead.
-                  </h2>
-                  <p className="text-lg text-gray-300 leading-relaxed">
-                    With a {values.responseTime}-minute response time, you're already
-                    operating at peak efficiency. Keep this up and you'll stay
-                    ahead of the competition.
+              {/* Breakdown */}
+              <div className="grid grid-cols-2 gap-6 pt-6 border-t border-gray-700">
+                <div>
+                  <p className="text-xs text-gray-400 uppercase tracking-wide mb-2">
+                    Lost leads/month
                   </p>
-                </motion.div>
-              )}
+                  <p className="text-3xl font-bold">{results.lostLeads}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-400 uppercase tracking-wide mb-2">
+                    Lost per year
+                  </p>
+                  <p className="text-3xl font-bold">
+                    ${results.lostAnnualRevenue.toLocaleString()}
+                  </p>
+                </div>
+              </div>
+
+              {/* Citation */}
+              <p className="text-xs text-gray-500 pt-2">
+                Based on MIT and InsideSales lead-response time studies.
+              </p>
+            </motion.div>
+          )}
+
+          {results && isAlreadyFast && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 20 }}
+              transition={{ duration: 0.5 }}
+              className="bg-black text-white p-10 rounded-lg space-y-4 mb-8"
+            >
+              <h2 className="text-4xl font-bold">
+                You're capturing nearly every lead.
+              </h2>
+              <p className="text-lg text-gray-300">
+                With your current response time, you're already operating at peak
+                efficiency. Keep this up and you'll stay ahead of the competition.
+              </p>
             </motion.div>
           )}
         </AnimatePresence>
 
-        {/* Footer */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.6, delay: 0.4 }}
-          className="text-center mt-12 space-y-4"
-        >
-          <p className="text-sm text-gray-600">
-            Ready to reclaim your lost revenue? Pronto AI automates lead
-            qualification and response to keep your pipeline moving.
-          </p>
-          <a
-            href="#contact"
-            className="inline-flex items-center gap-2 text-black font-semibold hover:gap-3 transition-all"
+        {/* CTA */}
+        {results && !isAlreadyFast && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.6, delay: 0.4 }}
+            className="text-center space-y-6"
           >
-            See how to fix this <ArrowRight className="w-4 h-4" />
-          </a>
-        </motion.div>
+            <p className="text-gray-600 text-sm">
+              Ready to reclaim this lost revenue? Let's talk about how Pronto AI can
+              help you respond to leads faster.
+            </p>
+            <a
+              href="https://calendly.com/pronto-ai/demo"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-3 bg-black text-white px-8 py-4 rounded-lg font-semibold hover:bg-gray-800 transition-all"
+            >
+              Book a call with Pronto AI
+              <ArrowRight className="w-5 h-5" />
+            </a>
+          </motion.div>
+        )}
       </div>
     </div>
   )
